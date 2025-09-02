@@ -1,6 +1,6 @@
 # general settings
-name: SwinIR_x5_wind_speed
-model_type: SwinIRModel
+name: HAT_New_Data
+model_type: HATModel
 scale: 5
 num_gpu: auto
 manual_seed: 0
@@ -8,51 +8,56 @@ manual_seed: 0
 # dataset and data loader settings
 datasets:
   train:
-    name: CustomDataset
+    name: ERA5toCERRA_V2
     type: NumpyPairedDataset # 사용자 정의 데이터셋 클래스 이름
-    dataroot_gt: /home/wj/works/Wind_Speed_Data/processed2/train/HR.npy # HR 데이터 경로
-    dataroot_lq: /home/wj/works/Wind_Speed_Data/processed2/train/LR.npy # LR 데이터 경로
-    #meta_info_file: basicsr/data/meta_info/meta_info_DIV2K800sub_GT.txt
+    dataroot_gt: /home/wj/ERA5toCERRA_NEW/processed_data/bundled/train_hr_norm.npy # HR 데이터 경로
+    dataroot_lq: /home/wj/ERA5toCERRA_NEW/processed_data/bundled/train_lr_norm.npy # LR 데이터 경로
     filename_tmpl: '{}'
     io_backend:
       type: numpy
 
-    gt_size: 100
+    gt_size: 255
     use_hflip: false
     use_rot: false
 
     # data loader
     num_worker_per_gpu: 8
-    batch_size_per_gpu: 32 # 배치사이즈 4
-    dataset_enlarge_ratio: 1 # 데이터 증강 X
+    batch_size_per_gpu: 12
+    dataset_enlarge_ratio: 1
     prefetch_mode: ~
 
   val:
-    name: CustomValDataset
+    name: ERA5toCERRA_V2
     type: NumpyPairedDataset # 검증 데이터셋도 같은 구조 사용
-    dataroot_gt: /home/wj/works/Wind_Speed_Data/processed2/val/HR.npy
-    dataroot_lq: /home/wj/works/Wind_Speed_Data/processed2/val/LR.npy
+    dataroot_gt: //home/wj/ERA5toCERRA_NEW/processed_data/bundled/val_hr_norm.npy
+    dataroot_lq: /home/wj/ERA5toCERRA_NEW/processed_data/bundled/val_lr_norm.npy
+    norm_path: /home/wj/ERA5toCERRA_NEW/processed_data/bundled/manifest_train_scalers.npz
     io_backend:
       type: numpy
 
 # network structures
 network_g:
-  type: SwinIR
-  upscale: 5 # 4->5
-  in_chans: 1 # 3->1
-  img_size: 20 # 수정
-  window_size: 5 # 20/5=4로 나눠지고, 100도 5의 배수
-  img_range: 1.
+  type: HAT
+  upscale: 5             # 4 → 5 (데이터와 일치)
+  in_chans: 1            # 3 → 1 (풍속 1채널)
+  img_size: 51           # 입력 이미지 크기 (20x20)
+  window_size: 17         # 20/5 = 4 → window 완전 분할 가능
+  compress_ratio: 3
+  squeeze_factor: 30
+  conv_scale: 0.01
+  overlap_ratio: 0.5
+  img_range: 1.          # 풍속 정규화 기준
   depths: [6, 6, 6, 6, 6, 6]
-  embed_dim: 180
+  embed_dim: 96
   num_heads: [6, 6, 6, 6, 6, 6]
   mlp_ratio: 2
   upsampler: 'pixelshuffle'
   resi_connection: '1conv'
 
+
 # path
 path:
-  experiments_root: experiments/paper # 명시적으로 지정한 experiments_root
+  experiments_root: experiments/SCIE # 명시적으로 지정한 experiments_root
   pretrain_network_g: ~ # 사전 학습된 모델이 없는 경우
   strict_load_g: true
   resume_state: ~ # 학습 상태를 처음부터 시작
@@ -68,10 +73,10 @@ train:
 
   scheduler:
     type: MultiStepLR
-    milestones: [60000, 75000, 84000]  # 69%, 86%, 96%
-    gamma: 0.7
+    milestones: [35000, 43000, 48000]  # total_iter = 50000 기준
+    gamma: 0.5
 
-  total_iter: 87500 # 100에포크
+  total_iter: 50000 # 100에포크
   warmup_iter: -1  # no warm up
 
   # losses
@@ -82,7 +87,7 @@ train:
 
 # validation settings
 val:
-  val_freq: !!float 3.5e3  # 1 epoch마다 검증
+  val_freq: !!float 1800  # 1 epoch마다 검증
   save_img: true
 
   metrics:
@@ -94,7 +99,7 @@ val:
 # logging settings
 logger:
   print_freq: 100
-  save_checkpoint_freq: !!float 3.5e3  # 1 epoch마다 검증
+  save_checkpoint_freq: !!float 1800 # 1 epoch마다 검증
   use_tb_logger: true
   wandb:
     project: ~

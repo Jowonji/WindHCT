@@ -231,45 +231,46 @@ class ECB(nn.Module):
             rep_weight, rep_bias = rep_weight + weight_idt, rep_bias + bias_idt
         return rep_weight, rep_bias
 
-
 @ARCH_REGISTRY.register()
 class ECBSR(nn.Module):
-    """ECBSR architecture.
+    """Modified ECBSR for fair comparison with PixelShuffle(5) + Conv + ReLU + tail structure."""
 
-    Paper: Edge-oriented Convolution Block for Real-time Super Resolution on Mobile Devices
-    Ref git repo: https://github.com/xindongzhang/ECBSR
-
-    Args:
-        num_in_ch (int): Channel number of inputs.
-        num_out_ch (int): Channel number of outputs.
-        num_block (int): Block number in the trunk network.
-        num_channel (int): Channel number.
-        with_idt (bool): Whether use identity in convolution layers.
-        act_type (str): Activation type.
-        scale (int): Upsampling factor.
-    """
-
-    def __init__(self, num_in_ch, num_out_ch, num_block, num_channel, with_idt, act_type, scale):
+    def __init__(self,
+                 num_in_ch,
+                 num_out_ch,
+                 num_block,
+                 num_channel,
+                 with_idt,
+                 act_type,
+                 scale):
         super(ECBSR, self).__init__()
-        self.num_in_ch = num_in_ch
         self.scale = scale
 
-        backbone = []
-        backbone += [ECB(num_in_ch, num_channel, depth_multiplier=2.0, act_type=act_type, with_idt=with_idt)]
+        # Feature extraction + trunk blocks
+        layers = [ECB(num_in_ch, num_channel, depth_multiplier=2.0, act_type=act_type, with_idt=with_idt)]
         for _ in range(num_block):
-            backbone += [ECB(num_channel, num_channel, depth_multiplier=2.0, act_type=act_type, with_idt=with_idt)]
-        backbone += [
-            ECB(num_channel, num_out_ch * scale * scale, depth_multiplier=2.0, act_type='linear', with_idt=with_idt)
-        ]
+            layers.append(ECB(num_channel, num_channel, depth_multiplier=2.0, act_type=act_type, with_idt=with_idt))
 
-        self.backbone = nn.Sequential(*backbone)
-        self.upsampler = nn.PixelShuffle(scale)
+        # Upsampling head: C → C×25
+        layers.append(
+            ECB(num_channel, num_channel * scale * scale, depth_multiplier=2.0, act_type='linear', with_idt=with_idt)
+        )
+
+        self.backbone = nn.Sequential(*layers)
+
+        # ✅ PixelShuffle + post-processing conv + activation
+        self.upsampler = nn.Sequential(
+            nn.PixelShuffle(scale),
+            nn.Conv2d(num_channel, num_channel, 3, 1, 1),
+            nn.ReLU(inplace=True)
+        )
+
+        # ✅ Final tail conv (same as your model)
+        self.tail = nn.Conv2d(num_channel, num_out_ch, 3, 1, 1)
 
     def forward(self, x):
-        if self.num_in_ch > 1:
-            shortcut = torch.repeat_interleave(x, self.scale * self.scale, dim=1)
-        else:
-            shortcut = x  # will repeat the input in the channel dimension (repeat  scale * scale times)
-        y = self.backbone(x) + shortcut
-        y = self.upsampler(y)
-        return y
+        x = self.backbone(x)
+        x = self.upsampler(x)
+        x = self.tail(x)
+        return x
+

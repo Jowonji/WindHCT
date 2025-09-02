@@ -202,12 +202,18 @@ class SRModel(BaseModel):
             self.nondist_validation(dataloader, current_iter, tb_logger, save_img)
 
     def nondist_validation(self, dataloader, current_iter, tb_logger, save_img):
-        # 데이터셋 이름 가져오기
         dataset_name = dataloader.dataset.opt['name']
 
-        # HR 데이터 범위 가져오기
-        hr_min = dataloader.dataset.hr_min
-        hr_max = dataloader.dataset.hr_max
+        stats = np.load(self.opt['datasets']['val']['norm_path'])
+        # 안전하게 키 확인 후 가져오기
+        if 'hr_min' in stats:
+            hr_min = stats['hr_min'].item()
+            hr_max = stats['hr_max'].item()
+        elif 'min_hr' in stats:
+            hr_min = stats['min_hr'].item()
+            hr_max = stats['max_hr'].item()
+        else:
+            raise KeyError("npz 파일에 hr_min/hr_max 또는 min_hr/max_hr 키가 없습니다.")
 
         # 검증에서 사용할 메트릭(metric)이 정의되어 있는지 확인
         with_metrics = self.opt['val'].get('metrics') is not None
@@ -263,6 +269,15 @@ class SRModel(BaseModel):
             sr_img_rescaled = sr_tensor * (hr_max - hr_min) + hr_min
             gt_img_rescaled = gt_tensor * (hr_max - hr_min) + hr_min
 
+            # ✅ 마스크 존재 시 평가 범위 제한
+            if 'mask' in val_data:
+                mask = val_data['mask'].squeeze().cpu().numpy()  # (H, W)
+                # 마스크 적용 (결측 또는 무효 영역 제외)
+                sr_img_rescaled = sr_img_rescaled * mask
+                gt_img_rescaled = gt_img_rescaled * mask
+            else:
+                mask = np.ones_like(sr_img_rescaled)  # 평가 전체 영역으로 처리
+
             # RMSE 계산 전에 NaN 및 Inf 체크
             if np.isnan(sr_img_rescaled).any() or np.isnan(gt_img_rescaled).any():
                 raise ValueError(f"NaN detected in SR or GT image for {img_name}. Check normalization or model output.")
@@ -278,37 +293,44 @@ class SRModel(BaseModel):
                 'img2': gt_img_rescaled
             }
 
-            # 5. SR 및 GT 이미지 범위 확인
-            #print(f"SR Image Range: min={sr_img_rescaled.min()}, max={sr_img_rescaled.max()}")
-            #print(f"GT Image Range: min={gt_img_rescaled.min()}, max={gt_img_rescaled.max()}")
-
-            # 6. GPU 메모리 관리
             del self.lq, self.output
             torch.cuda.empty_cache()
 
             # 5. 결과 이미지 저장
-            if save_img:
-                if sr_img_rescaled.ndim == 2:
-                    epsilon = 1e-8
-                    sr_img_normalized = (sr_img_rescaled - sr_img_rescaled.min()) / (
-                        max(sr_img_rescaled.max() - sr_img_rescaled.min(), epsilon)
-                    )
-                    sr_img_colormap = cm.viridis(sr_img_normalized)[:, :, :3]  # Viridis 컬러맵 적용
-                    sr_img_colormap = (sr_img_colormap * 255).astype(np.uint8)
+            if save_img and sr_img_rescaled.ndim == 2:
+                epsilon = 1e-8
 
-                    # 이미지별 폴더 생성
-                    img_folder = osp.join(self.opt['path']['visualization'], dataset_name, img_name)
-                    os.makedirs(img_folder, exist_ok=True)
+                # 🔹 마스크된 영역만 시각화 (mask == 1: 유효 영역)
+                sr_vis = np.where(mask == 1, sr_img_rescaled, np.nan)
 
-                    # 🔹 iter별로 저장하도록 경로 설정
-                    save_img_path = osp.join(img_folder, f'{current_iter}.png')
+                # 🔹 NaN 제외 정규화 (범위: 0~1)
+                sr_min = np.nanmin(sr_vis)
+                sr_max = np.nanmax(sr_vis)
+                sr_img_normalized = (sr_vis - sr_min) / (sr_max - sr_min + epsilon)
 
-                    # 이미지 저장
-                    try:
-                        imageio.imwrite(save_img_path, sr_img_colormap)
-                        print(f"✅ Image successfully saved at {save_img_path}")
-                    except Exception as e:
-                        print(f"❌ Failed to save image at {save_img_path}. Error: {e}")
+                # 🔹 Viridis 컬러맵 적용 → RGBA로 반환됨
+                sr_colormap = cm.viridis(sr_img_normalized)
+
+                # 🔹 NaN 영역은 회색으로 설정 (R=200, G=200, B=200)
+                sr_colormap[np.isnan(sr_img_normalized)] = [0.78, 0.78, 0.78, 1.0]
+
+                # 🔹 RGB만 추출 후 0~255 정수로 변환
+                sr_img_rgb = (sr_colormap[:, :, :3] * 255).astype(np.uint8)
+
+                # 🔄 상하 반전 (이미지 좌표계에 맞추기 위해)
+                sr_img_rgb = np.flipud(sr_img_rgb)
+
+                # 🔹 저장 경로 생성
+                img_folder = osp.join(self.opt['path']['visualization'], dataset_name, img_name)
+                os.makedirs(img_folder, exist_ok=True)
+                save_img_path = osp.join(img_folder, f'{current_iter}.png')
+
+                # 🔹 이미지 저장
+                try:
+                    imageio.imwrite(save_img_path, sr_img_rgb)
+                    print(f"✅ Image successfully saved at {save_img_path}")
+                except Exception as e:
+                    print(f"❌ Failed to save image at {save_img_path}. Error: {e}")
 
             # 8. 메트릭 계산
             if with_metrics:

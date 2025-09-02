@@ -1,0 +1,52 @@
+name: SwinIR_korea
+suffix: ~  # add suffix to saved images
+model_type: SwinIRModel
+scale: 5
+crop_border: ~  # crop border when evaluation. If None, crop the scale pixels
+num_gpu: 1  # set num_gpu: 0 for cpu mode
+manual_seed: 0
+
+datasets:
+  test_1:  # the 1st test dataset
+    name: KoreaTestDataset
+    type: NumpyPairedKorea
+    dataroot_gt: /home/wj/works/Wind_Speed_Data/Korea/test/HR_2023to2023.npy
+    dataroot_lq: /home/wj/works/Wind_Speed_Data/Korea/test/LR_2023to2023.npy
+    io_backend:
+      type: numpy
+
+# network structures
+network_g:
+  type: SwinIR
+  upscale: 5 # 4->5
+  in_chans: 1 # 3->1
+  img_size: 20 # 수정
+  window_size: 5 # 20/5=4로 나눠지고, 100도 5의 배수
+  img_range: 1.
+  depths: [6, 6, 6, 6, 6, 6]
+  embed_dim: 180
+  num_heads: [6, 6, 6, 6, 6, 6]
+  mlp_ratio: 2
+  upsampler: 'pixelshuffle'
+  resi_connection: '1conv'
+
+save_img: true
+
+# path
+path:
+  pretrain_network_g: /home/wj/works/SR-project2/BasicSR/experiments/korea/HAT_korea/models/net_g_7070.pth
+  strict_load_g: true
+  npy_results: ./results/npy_results  # 🔹 NumPy 저장 경로 추가
+  gt_visualization: ./results/gt_visualization
+
+# validation settings
+val:
+  save_img: true
+  save_npy: true  # 🔹 NumPy 저장 여부 (False로 설정하면 저장 안 됨)
+  suffix: ~  # add suffix to saved images, if None, use exp name
+
+  metrics:
+    psnr: {}  # ✅ 불필요한 'type' 제거
+    ssim: {}
+    rmse: {}
+    mae: {}

@@ -36,7 +36,7 @@ def init_tb_loggers(opt):
         assert opt['logger'].get('use_tb_logger') is True, ('should turn on tensorboard when using wandb')
         init_wandb_logger(opt)
 
-    # TensorBoard 로거 초기화    
+    # TensorBoard 로거 초기화
     tb_logger = None # 초기값 None 설정
     if opt['logger'].get('use_tb_logger') and 'debug' not in opt['name']:
         # TensorBoard 로거를 활성화할 조건:
@@ -90,7 +90,7 @@ def create_train_val_dataloader(opt, logger):
 
             # 학습 통계 계산
             num_iter_per_epoch = math.ceil(
-                len(train_set) * dataset_enlarge_ratio / 
+                len(train_set) * dataset_enlarge_ratio /
                 (dataset_opt['batch_size_per_gpu'] * opt['world_size'])
             ) # 에포크당 반복(iter) 횟수 계산
             total_iters = int(opt['train']['total_iter']) # 총 반복(iter) 수
@@ -105,15 +105,15 @@ def create_train_val_dataloader(opt, logger):
                         f'\n\tRequire iter number per epoch: {num_iter_per_epoch}'
                         f'\n\tTotal epochs: {total_epochs}; iters: {total_iters}.'
                     )
-            
+
         elif phase.split('_')[0] == 'val':
             # 검증 데이터셋 및 데이터 로더 생성
             val_set = build_dataset(dataset_opt) # 검증 데이터셋 생성
             val_loader = build_dataloader(
-                val_set, 
-                dataset_opt, 
-                num_gpu=opt['num_gpu'], 
-                dist=opt['dist'], 
+                val_set,
+                dataset_opt,
+                num_gpu=opt['num_gpu'],
+                dist=opt['dist'],
                 sampler=None, # 검증에는 샘플러 사용하지 않음
                 seed=opt['manual_seed']
             ) # 검증 데이터 로더 생성
@@ -136,7 +136,7 @@ def load_resume_state(opt):
             - opt['auto_resume']: 자동으로 가장 최근 상태를 복원할지 여부 (True/False).
             - opt['name']: 현재 실험 이름.
             - opt['path']['resume_state']: 수동으로 지정된 복원 상태 경로.
-    
+
     Returns:
         resume_state (dict or None): 로드된 학습 상태 딕셔너리.
             - None: 복원할 상태가 없는 경우.
@@ -158,12 +158,12 @@ def load_resume_state(opt):
                 resume_state_path = osp.join(state_path, f'{max(states):.0f}.state')
                 # 경로를 옵션에 저장
                 opt['path']['resume_state'] = resume_state_path
-    
+
     # 수동으로 resume_state 경로를 지정한 경우
     else:
         if opt['path'].get('resume_state'): # 경로가 명시적으로 지정되어 있는지 확인
             resume_state_path = opt['path']['resume_state']
-        
+
     # 학습 상태 로드
     if resume_state_path is None:
         # 복원 상태 경로가 없는 경우
@@ -194,7 +194,7 @@ def train_pipeline(root_path):
     opt['root_path'] = root_path # 설정 파일의 경로를 저장
 
     # 성능 최적화를 위해 CuDNN 벤치마크 활성화
-    torch.backends.cudnn.benchmark = True 
+    torch.backends.cudnn.benchmark = True
     # 아래 설정은 정확한 연산을 보장하지만 성능 저하 가능성이 있음.
     # torch.backends.cudnn.deterministic = True
 
@@ -309,7 +309,7 @@ def train_pipeline(root_path):
 
                 # 진행률 바 업데이트
                 pbar.update(1)
-                
+
                 # 다음 반복 준비
                 data_timer.start() # 데이터 타이머 시작
                 iter_timer.start() # 반복 타이머 시작

@@ -1,0 +1,105 @@
+# TODO
+# general settings
+name: RCAN_korea
+model_type: SRModel
+scale: 5
+num_gpu: 1  # set num_gpu: 0 for cpu mode
+manual_seed: 10
+
+# dataset and data loader settings
+datasets:
+  train:
+    name: KoreaTrainDataset
+    type: NumpyPairedKorea # 사용자 정의 데이터셋 클래스 이름
+    dataroot_gt: /home/wj/works/Wind_Speed_Data/Korea/train/HR_2012to2020.npy # HR 데이터 경로
+    dataroot_lq: /home/wj/works/Wind_Speed_Data/Korea/train/LR_2012to2020.npy # LR 데이터 경로
+    filename_tmpl: '{}'
+    io_backend:
+      type: numpy
+
+    gt_size: 100
+    use_hflip: false
+    use_rot: false
+
+    # data loader
+    num_worker_per_gpu: 8
+    batch_size_per_gpu: 32
+    dataset_enlarge_ratio: 1
+    prefetch_mode: ~
+
+  val:
+    name: KoreaValDataset
+    type: NumpyPairedKorea # 검증 데이터셋도 같은 구조 사용
+    dataroot_gt: /home/wj/works/Wind_Speed_Data/Korea/val/HR_2021to2022.npy
+    dataroot_lq: /home/wj/works/Wind_Speed_Data/Korea/val/LR_2021to2022.npy
+    io_backend:
+      type: numpy
+
+# network structures
+network_g:
+  type: RCAN
+  num_in_ch: 1
+  num_out_ch: 1
+  num_feat: 64
+  num_group: 10
+  num_block: 20
+  squeeze_factor: 16
+  upscale: 5
+  res_scale: 1
+  img_range: 1.
+  rgb_mean: [0.0]  # 무채널 데이터니까 걍 0으로
+
+# path
+path:
+  experiments_root: experiments/korea  # 명시적으로 지정한 experiments_root
+  pretrain_network_g: ~
+  strict_load_g: false
+  resume_state: ~
+
+# training settings
+train:
+  ema_decay: 0.999
+  optim_g:
+    type: Adam
+    lr: !!float 1e-4
+    weight_decay: 0
+    betas: [0.9, 0.99]
+
+  scheduler:
+    type: MultiStepLR
+    milestones: [60000, 75000, 84000]  # 69%, 86%, 96%
+    gamma: 0.7
+
+  total_iter: 15000
+  warmup_iter: -1  # no warm up
+
+  # losses
+  pixel_opt:
+    type: L1Loss
+    loss_weight: 1.0
+    reduction: mean
+
+# validation settings
+val:
+  val_freq: !!float 505  # 1 epoch마다 검증
+  save_img: true
+
+  metrics:
+    rmse: # metric name, can be arbitrary
+      type: calculate_rmse
+      crop_border: 0
+      test_y_channel: false
+
+# logging settings
+logger:
+  print_freq: 100
+  save_checkpoint_freq: !!float 505  # 1 epoch마다 검증
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500

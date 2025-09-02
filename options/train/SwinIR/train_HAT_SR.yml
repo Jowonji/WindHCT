@@ -1,6 +1,6 @@
 # general settings
-name: SwinIR_x5_wind_speed
-model_type: SwinIRModel
+name: HAT_x5_wind_speed
+model_type: HATModel
 scale: 5
 num_gpu: auto
 manual_seed: 0
@@ -8,10 +8,10 @@ manual_seed: 0
 # dataset and data loader settings
 datasets:
   train:
-    name: CustomDataset
-    type: NumpyPairedDataset # 사용자 정의 데이터셋 클래스 이름
-    dataroot_gt: /home/wj/works/Wind_Speed_Data/processed2/train/HR.npy # HR 데이터 경로
-    dataroot_lq: /home/wj/works/Wind_Speed_Data/processed2/train/LR.npy # LR 데이터 경로
+    name: KoreaTrainDataset
+    type: NumpyPairedKorea # 사용자 정의 데이터셋 클래스 이름
+    dataroot_gt: /home/wj/works/Wind_Speed_Data/Korea/train/HR_2012to2020.npy # HR 데이터 경로
+    dataroot_lq: /home/wj/works/Wind_Speed_Data/Korea/train/LR_2012to2020.npy # LR 데이터 경로
     #meta_info_file: basicsr/data/meta_info/meta_info_DIV2K800sub_GT.txt
     filename_tmpl: '{}'
     io_backend:
@@ -37,18 +37,23 @@ datasets:
 
 # network structures
 network_g:
-  type: SwinIR
-  upscale: 5 # 4->5
-  in_chans: 1 # 3->1
-  img_size: 20 # 수정
-  window_size: 5 # 20/5=4로 나눠지고, 100도 5의 배수
-  img_range: 1.
+  type: HAT
+  upscale: 5             # 4 → 5 (데이터와 일치)
+  in_chans: 1            # 3 → 1 (풍속 1채널)
+  img_size: 20           # 입력 이미지 크기 (20x20)
+  window_size: 5         # 20/5 = 4 → window 완전 분할 가능
+  compress_ratio: 3
+  squeeze_factor: 30
+  conv_scale: 0.01
+  overlap_ratio: 0.5
+  img_range: 1.          # 풍속 정규화 기준
   depths: [6, 6, 6, 6, 6, 6]
-  embed_dim: 180
+  embed_dim: 96
   num_heads: [6, 6, 6, 6, 6, 6]
   mlp_ratio: 2
   upsampler: 'pixelshuffle'
   resi_connection: '1conv'
+
 
 # path
 path:

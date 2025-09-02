@@ -1,0 +1,110 @@
+# general settings
+name: Ours_2
+model_type: SRModel
+scale: 5 # 5배 업스케일링
+num_gpu: 1  # set num_gpu: 0 for cpu mode
+manual_seed: 0
+
+# dataset and data loader settings
+datasets:
+  train:
+    name: KoreaTrainDataset
+    type: NumpyPairedKorea # 사용자 정의 데이터셋 클래스 이름
+    dataroot_gt: /home/wj/works/Wind_Speed_Data/Korea/train/HR_2012to2020.npy # HR 데이터 경로
+    dataroot_lq: /home/wj/works/Wind_Speed_Data/Korea/train/LR_2012to2020.npy # LR 데이터 경로
+    filename_tmpl: '{}'
+    io_backend:
+      type: numpy # numpy 배열을 사용
+    gt_size: 100 # HR 데이터 크기
+    use_hflip: false
+    use_rot: false
+    use_blur: false
+    # data loader
+    num_worker_per_gpu: 8  # ✅ 성능 최적화
+    batch_size_per_gpu: 32  # ✅ 메모리 안정성을 고려하여 32 → 24로 조정
+    dataset_enlarge_ratio: 1 #데이터 증강 없이 그대로 사용
+    prefetch_mode: ~
+
+  val:
+    name: KoreaValDataset
+    type: NumpyPairedKorea # 검증 데이터셋도 같은 구조 사용
+    dataroot_gt: /home/wj/works/Wind_Speed_Data/Korea/val/HR_2021to2022.npy
+    dataroot_lq: /home/wj/works/Wind_Speed_Data/Korea/val/LR_2021to2022.npy
+    io_backend:
+      type: numpy
+
+network_g:
+  type: WaSRNet
+  num_in_ch: 1
+  num_out_ch: 1
+  num_feat: 64
+  num_group: 5
+ #num_block: 6
+  img_range: 1.0
+  rgb_mean: [0.0]        # 1채널이므로 단일값
+  # 주석처리된 업스케일, 필요시 해제
+  upscale: 5
+
+# path
+path:
+  experiments_root: experiments/korea  # 명시적으로 지정한 experiments_root
+  pretrain_network_g: ~ # 사전 학습된 모델이 없는 경우
+  strict_load_g: true
+  resume_state: ~ # 학습 상태를 처음부터 시작
+
+train:
+  ema_decay: 0.999
+  optim_g:
+    type: Adam
+    lr: !!float 1e-4
+    weight_decay: 0
+    betas: [0.9, 0.99]
+  optim_d:
+    type: Adam
+    lr: !!float 1e-4
+    weight_decay: 0
+    betas: [0.9, 0.99]
+
+  scheduler:
+    type: MultiStepLR
+    milestones: [60000, 75000, 84000]  # 69%, 86%, 96%
+    gamma: 0.7
+
+  total_iter: 40000
+  warmup_iter: -1  # no warm up
+
+  # losses
+  pixel_opt:
+    type: L1Loss
+    loss_weight: 1.0
+    reduction: mean
+
+  #perceptual_opt:
+  #  type: GradientLoss
+  #  loss_weight: 0.2
+  #  reduction: mean
+
+# validation settings
+val:
+  val_freq: !!float 505
+  save_img: true
+
+  metrics:
+    rmse: # metric name, can be arbitrary
+      type: calculate_rmse
+      crop_border: 0
+      test_y_channel: false
+
+# logging settings
+logger:
+  print_freq: 100
+  save_checkpoint_freq: !!float 505
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500

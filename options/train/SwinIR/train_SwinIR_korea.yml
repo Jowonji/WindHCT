@@ -1,5 +1,5 @@
 # general settings
-name: SwinIR_x5_wind_speed
+name: SwinIR_korea
 model_type: SwinIRModel
 scale: 5
 num_gpu: auto
@@ -8,10 +8,10 @@ manual_seed: 0
 # dataset and data loader settings
 datasets:
   train:
-    name: CustomDataset
-    type: NumpyPairedDataset # 사용자 정의 데이터셋 클래스 이름
-    dataroot_gt: /home/wj/works/Wind_Speed_Data/processed2/train/HR.npy # HR 데이터 경로
-    dataroot_lq: /home/wj/works/Wind_Speed_Data/processed2/train/LR.npy # LR 데이터 경로
+    name: KoreaTrainDataset
+    type: NumpyPairedKorea # 사용자 정의 데이터셋 클래스 이름
+    dataroot_gt: /home/wj/works/Wind_Speed_Data/Korea/train/HR_2012to2020.npy # HR 데이터 경로
+    dataroot_lq: /home/wj/works/Wind_Speed_Data/Korea/train/LR_2012to2020.npy # LR 데이터 경로
     #meta_info_file: basicsr/data/meta_info/meta_info_DIV2K800sub_GT.txt
     filename_tmpl: '{}'
     io_backend:
@@ -28,10 +28,10 @@ datasets:
     prefetch_mode: ~
 
   val:
-    name: CustomValDataset
-    type: NumpyPairedDataset # 검증 데이터셋도 같은 구조 사용
-    dataroot_gt: /home/wj/works/Wind_Speed_Data/processed2/val/HR.npy
-    dataroot_lq: /home/wj/works/Wind_Speed_Data/processed2/val/LR.npy
+    name: KoreaValDataset
+    type: NumpyPairedKorea # 검증 데이터셋도 같은 구조 사용
+    dataroot_gt: /home/wj/works/Wind_Speed_Data/Korea/val/HR_2021to2022.npy
+    dataroot_lq: /home/wj/works/Wind_Speed_Data/Korea/val/LR_2021to2022.npy
     io_backend:
       type: numpy
 
@@ -52,7 +52,7 @@ network_g:
 
 # path
 path:
-  experiments_root: experiments/paper # 명시적으로 지정한 experiments_root
+  experiments_root: experiments/korea # 명시적으로 지정한 experiments_root
   pretrain_network_g: ~ # 사전 학습된 모델이 없는 경우
   strict_load_g: true
   resume_state: ~ # 학습 상태를 처음부터 시작
@@ -71,7 +71,7 @@ train:
     milestones: [60000, 75000, 84000]  # 69%, 86%, 96%
     gamma: 0.7
 
-  total_iter: 87500 # 100에포크
+  total_iter: 40000
   warmup_iter: -1  # no warm up
 
   # losses
@@ -82,7 +82,7 @@ train:
 
 # validation settings
 val:
-  val_freq: !!float 3.5e3  # 1 epoch마다 검증
+  val_freq: !!float 505  # 1 epoch마다 검증
   save_img: true
 
   metrics:
@@ -94,7 +94,7 @@ val:
 # logging settings
 logger:
   print_freq: 100
-  save_checkpoint_freq: !!float 3.5e3  # 1 epoch마다 검증
+  save_checkpoint_freq: !!float 505  # 1 epoch마다 검증
   use_tb_logger: true
   wandb:
     project: ~

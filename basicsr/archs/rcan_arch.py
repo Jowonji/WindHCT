@@ -100,14 +100,14 @@ class RCAN(nn.Module):
                  num_group=10,
                  num_block=16,
                  squeeze_factor=16,
-                 upscale=4,
+                 upscale=5,
                  res_scale=1,
-                 img_range=255.,
-                 rgb_mean=(0.4488, 0.4371, 0.4040)):
+                 img_range=1.,
+                 rgb_mean=(0, 0, )):
         super(RCAN, self).__init__()
 
         self.img_range = img_range
-        self.mean = torch.Tensor(rgb_mean).view(1, 3, 1, 1)
+        self.mean = torch.Tensor(rgb_mean).view(1, num_in_ch, 1, 1)
 
         self.conv_first = nn.Conv2d(num_in_ch, num_feat, 3, 1, 1)
         self.body = make_layer(
@@ -118,18 +118,26 @@ class RCAN(nn.Module):
             squeeze_factor=squeeze_factor,
             res_scale=res_scale)
         self.conv_after_body = nn.Conv2d(num_feat, num_feat, 3, 1, 1)
-        self.upsample = Upsample(upscale, num_feat)
-        self.conv_last = nn.Conv2d(num_feat, num_out_ch, 3, 1, 1)
+
+        # ✅ PixelShuffle-based 5× upsampling (same as SwinIR/FASR)
+        self.upsample = nn.Sequential(
+            nn.Conv2d(num_feat, num_feat * 25, 3, 1, 1),
+            nn.PixelShuffle(5),
+            nn.Conv2d(num_feat, num_feat, 3, 1, 1),
+            nn.ReLU(inplace=True)
+        )
+        self.tail = nn.Conv2d(num_feat, num_out_ch, 3, 1, 1)
 
     def forward(self, x):
         self.mean = self.mean.type_as(x)
-
         x = (x - self.mean) * self.img_range
+
         x = self.conv_first(x)
         res = self.conv_after_body(self.body(x))
         res += x
 
-        x = self.conv_last(self.upsample(res))
-        x = x / self.img_range + self.mean
+        x = self.upsample(res)
+        x = self.tail(x)
 
+        x = x / self.img_range + self.mean
         return x

@@ -1,0 +1,106 @@
+# TODO
+# general settings
+name: RCAN_New_Data
+model_type: SRModel
+scale: 5
+num_gpu: 1  # set num_gpu: 0 for cpu mode
+manual_seed: 10
+
+# dataset and data loader settings
+datasets:
+  train:
+    name: ERA5toCERRA_V2
+    type: NumpyPairedDataset # 사용자 정의 데이터셋 클래스 이름
+    dataroot_gt: /home/wj/ERA5toCERRA_NEW/processed_data/bundled/train_hr_norm.npy # HR 데이터 경로
+    dataroot_lq: /home/wj/ERA5toCERRA_NEW/processed_data/bundled/train_lr_norm.npy # LR 데이터 경로
+    filename_tmpl: '{}'
+    io_backend:
+      type: numpy
+
+    gt_size: 255
+    use_hflip: false
+    use_rot: false
+
+    # data loader
+    num_worker_per_gpu: 8
+    batch_size_per_gpu: 16
+    dataset_enlarge_ratio: 1
+    prefetch_mode: ~
+
+  val:
+    name: ERA5toCERRA_V2
+    type: NumpyPairedDataset # 검증 데이터셋도 같은 구조 사용
+    dataroot_gt: //home/wj/ERA5toCERRA_NEW/processed_data/bundled/val_hr_norm.npy
+    dataroot_lq: /home/wj/ERA5toCERRA_NEW/processed_data/bundled/val_lr_norm.npy
+    norm_path: /home/wj/ERA5toCERRA_NEW/processed_data/bundled/manifest_train_scalers.npz
+    io_backend:
+      type: numpy
+
+# network structures
+network_g:
+  type: RCAN
+  num_in_ch: 1
+  num_out_ch: 1
+  num_feat: 64
+  num_group: 10
+  num_block: 20
+  squeeze_factor: 16
+  upscale: 5
+  res_scale: 1
+  img_range: 1.
+  rgb_mean: [0.0]  # 무채널 데이터니까 걍 0으로
+
+# path
+path:
+  experiments_root: experiments/SCIE  # 명시적으로 지정한 experiments_root
+  pretrain_network_g: ~ # 사전 학습된 모델이 없는 경우
+  strict_load_g: false
+  resume_state: ~ # 학습 상태를 처음부터 시작
+
+# training settings
+train:
+  ema_decay: 0.999
+  optim_g:
+    type: Adam
+    lr: !!float 1e-4
+    weight_decay: 0
+    betas: [0.9, 0.99]
+
+  scheduler:
+    type: MultiStepLR
+    milestones: [35000, 43000, 48000]  # total_iter = 50000 기준
+    gamma: 0.5
+
+  total_iter: 50000
+  warmup_iter: -1  # no warm up
+
+  # losses
+  pixel_opt:
+    type: L1Loss
+    loss_weight: 1.0
+    reduction: mean
+
+# validation settings
+val:
+  val_freq: !!float 1800  # 1 epoch마다 검증
+  save_img: true
+
+  metrics:
+    rmse: # metric name, can be arbitrary
+      type: calculate_rmse
+      crop_border: 0
+      test_y_channel: false
+
+# logging settings
+logger:
+  print_freq: 100
+  save_checkpoint_freq: !!float 1800  # 1 epoch마다 검증
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500

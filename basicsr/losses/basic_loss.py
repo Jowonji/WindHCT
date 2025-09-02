@@ -5,6 +5,7 @@ from torch.nn import functional as F
 from basicsr.archs.vgg_arch import VGGFeatureExtractor
 from basicsr.utils.registry import LOSS_REGISTRY
 from .loss_util import weighted_loss
+from .dists_loss import DISTS  # DISTS 클래스가 같은 파일에 있으면 생략 가능
 
 _reduction_modes = ['none', 'mean', 'sum']
 
@@ -79,39 +80,97 @@ class MSELoss(nn.Module):
         """
         return self.loss_weight * mse_loss(pred, target, weight, reduction=self.reduction)
 
+@LOSS_REGISTRY.register()
+class DISTSPerceptualLoss(nn.Module):
+    def __init__(self, loss_weight=1.0):
+        super().__init__()
+        self.dists = DISTS()
+        self.loss_weight = loss_weight
+
+    def forward(self, pred, target):
+        if pred.size(1) == 1:
+            pred = pred.repeat(1, 3, 1, 1)
+        if target.size(1) == 1:
+            target = target.repeat(1, 3, 1, 1)
+
+        pred = torch.clamp(pred, 0, 1)
+        target = torch.clamp(target, 0, 1)
+
+        # DISTS가 배치별 점수 반환할 수 있으므로 평균 취함
+        score = 1 - self.dists(pred, target)  # shape: [B]
+        if score.ndim > 0:
+            score = score.mean()
+
+        return score * self.loss_weight, None
 
 @LOSS_REGISTRY.register()
-class CharbonnierLoss(nn.Module):
-    """Charbonnier loss (one variant of Robust L1Loss, a differentiable
-    variant of L1Loss).
-
-    Described in "Deep Laplacian Pyramid Networks for Fast and Accurate
-        Super-Resolution".
+class GradientLoss(nn.Module):
+    """Gradient-based L1 loss for edge/detail preservation.
 
     Args:
-        loss_weight (float): Loss weight for L1 loss. Default: 1.0.
-        reduction (str): Specifies the reduction to apply to the output.
-            Supported choices are 'none' | 'mean' | 'sum'. Default: 'mean'.
-        eps (float): A value used to control the curvature near zero. Default: 1e-12.
+        loss_weight (float): Loss weight for gradient loss. Default: 1.0.
+        reduction (str): 'mean' | 'sum' | 'none'. Default: 'mean'.
     """
 
-    def __init__(self, loss_weight=1.0, reduction='mean', eps=1e-12):
-        super(CharbonnierLoss, self).__init__()
+    def __init__(self, loss_weight=1.0, reduction='mean'):
+        super(GradientLoss, self).__init__()
         if reduction not in ['none', 'mean', 'sum']:
-            raise ValueError(f'Unsupported reduction mode: {reduction}. Supported ones are: {_reduction_modes}')
+            raise ValueError(f'Unsupported reduction mode: {reduction}. Supported: none | mean | sum')
 
         self.loss_weight = loss_weight
         self.reduction = reduction
-        self.eps = eps
 
     def forward(self, pred, target, weight=None, **kwargs):
         """
-        Args:
-            pred (Tensor): of shape (N, C, H, W). Predicted tensor.
-            target (Tensor): of shape (N, C, H, W). Ground truth tensor.
-            weight (Tensor, optional): of shape (N, C, H, W). Element-wise weights. Default: None.
+        Returns:
+            (loss_percep, loss_style) tuple. Style loss is 0 by default.
         """
-        return self.loss_weight * charbonnier_loss(pred, target, weight, eps=self.eps, reduction=self.reduction)
+        # Gradient in x-direction
+        pred_dx = pred[:, :, :, 1:] - pred[:, :, :, :-1]
+        target_dx = target[:, :, :, 1:] - target[:, :, :, :-1]
+
+        # Gradient in y-direction
+        pred_dy = pred[:, :, 1:, :] - pred[:, :, :-1, :]
+        target_dy = target[:, :, 1:, :] - target[:, :, :-1, :]
+
+        loss_dx = F.l1_loss(pred_dx, target_dx, reduction=self.reduction)
+        loss_dy = F.l1_loss(pred_dy, target_dy, reduction=self.reduction)
+        loss = self.loss_weight * (loss_dx + loss_dy)
+
+        return loss, torch.tensor(0.0, device=loss.device)
+
+#@LOSS_REGISTRY.register()
+#class CharbonnierLoss(nn.Module):
+#    """Charbonnier loss (one variant of Robust L1Loss, a differentiable
+#    variant of L1Loss).
+#
+#    Described in "Deep Laplacian Pyramid Networks for Fast and Accurate
+#        Super-Resolution".
+#
+#    Args:
+#        loss_weight (float): Loss weight for L1 loss. Default: 1.0.
+#        reduction (str): Specifies the reduction to apply to the output.
+#            Supported choices are 'none' | 'mean' | 'sum'. Default: 'mean'.
+#        eps (float): A value used to control the curvature near zero. Default: 1e-12.
+#    """
+#
+#    def __init__(self, loss_weight=1.0, reduction='mean', eps=1e-12):
+#        super(CharbonnierLoss, self).__init__()
+#        if reduction not in ['none', 'mean', 'sum']:
+#            raise ValueError(f'Unsupported reduction mode: {reduction}. Supported ones are: {_reduction_modes}')
+#
+#        self.loss_weight = loss_weight
+#        self.reduction = reduction
+#        self.eps = eps
+#
+#    def forward(self, pred, target, weight=None, **kwargs):
+#        """
+#        Args:
+#            pred (Tensor): of shape (N, C, H, W). Predicted tensor.
+#            target (Tensor): of shape (N, C, H, W). Ground truth tensor.
+#            weight (Tensor, optional): of shape (N, C, H, W). Element-wise weights. Default: None.
+#        """
+#        return self.loss_weight * charbonnier_loss(pred, target, weight, eps=self.eps, reduction=self.reduction)
 
 
 @LOSS_REGISTRY.register()
@@ -166,7 +225,7 @@ class PerceptualLoss(nn.Module):
                  perceptual_weight=1.0,
                  style_weight=0.,
                  criterion='l1'):
-        
+
 
         super(PerceptualLoss, self).__init__()
         self.perceptual_weight = perceptual_weight # 지각적 손실 가중치 설정
@@ -179,7 +238,7 @@ class PerceptualLoss(nn.Module):
             vgg_type=vgg_type, # VGG 네트워크 타입 지정(기본: vgg19)
             use_input_norm=use_input_norm, # 입력 정규화 여부
             range_norm=range_norm) # 갑 범위 변환 여부
-        
+
         # 손실 기준 설정(L1, L2, Frobenius Norm)
         self.criterion_type = criterion
         if self.criterion_type == 'l1':
@@ -253,3 +312,94 @@ class PerceptualLoss(nn.Module):
         features_t = features.transpose(1, 2)
         gram = features.bmm(features_t) / (c * h * w)
         return gram
+
+@LOSS_REGISTRY.register()
+class PatchSimilarityLoss(nn.Module):
+    def __init__(self, patch_size=10, l1_weight=0.1, loss_weight=1.0):
+        super(PatchSimilarityLoss, self).__init__()
+        self.patch_size = patch_size
+        self.l1_weight = l1_weight
+        self.loss_weight = loss_weight  # ✅ 추가
+
+    def forward(self, pred, target):
+        B, C, H, W = pred.shape
+        loss = 0.0
+        count = 0
+
+        for i in range(0, H - self.patch_size + 1, self.patch_size):
+            for j in range(0, W - self.patch_size + 1, self.patch_size):
+                pred_patch = pred[:, :, i:i+self.patch_size, j:j+self.patch_size]
+                target_patch = target[:, :, i:i+self.patch_size, j:j+self.patch_size]
+
+                if pred_patch.shape[2:] == (self.patch_size, self.patch_size):
+                    # (B, patch_size, patch_size, C) → (B, -1, C)
+                    pred_flat = pred_patch.permute(0, 2, 3, 1).reshape(B, -1, C)
+                    target_flat = target_patch.permute(0, 2, 3, 1).reshape(B, -1, C)
+
+                    sim = F.cosine_similarity(pred_flat, target_flat, dim=2).mean(dim=1)
+                    l1_diff = F.l1_loss(pred_patch, target_patch, reduction='mean')
+
+                    loss += torch.mean(1 - sim) + self.l1_weight * l1_diff
+                    count += 1
+
+        return (loss / count if count > 0 else loss) * self.loss_weight  # ✅ 적용
+
+
+@LOSS_REGISTRY.register()
+class WaveletHighFrequencyLoss(nn.Module):
+    def __init__(self, loss_weight=1.0, weight_hl=1.0, weight_lh=1.0, weight_hh=1.0):
+        super().__init__()
+        self.loss_weight = loss_weight
+
+        # 방향별 Haar 필터 정의
+        self.register_buffer('filter_hl', torch.tensor([[1, -1], [1, -1]], dtype=torch.float32).view(1, 1, 2, 2))
+        self.register_buffer('filter_lh', torch.tensor([[1, 1], [-1, -1]], dtype=torch.float32).view(1, 1, 2, 2))
+        self.register_buffer('filter_hh', torch.tensor([[1, -1], [-1, 1]], dtype=torch.float32).view(1, 1, 2, 2))
+
+        self.weight_hl = weight_hl
+        self.weight_lh = weight_lh
+        self.weight_hh = weight_hh
+
+    def extract_hf(self, img, filt):
+        B, C, H, W = img.shape
+        pad_h = (2 - H % 2) % 2
+        pad_w = (2 - W % 2) % 2
+        img = F.pad(img, (0, pad_w, 0, pad_h), mode='reflect')
+        return torch.abs(F.conv2d(img, filt.repeat(C, 1, 1, 1), stride=2, groups=C))
+
+    def forward(self, pred, target):
+        loss = 0.0
+        for filt, weight in zip(
+            [self.filter_hl, self.filter_lh, self.filter_hh],
+            [self.weight_hl, self.weight_lh, self.weight_hh]
+        ):
+            pred_hf = self.extract_hf(pred, filt)
+            target_hf = self.extract_hf(target, filt)
+            loss += weight * F.l1_loss(pred_hf, target_hf)
+        return loss * self.loss_weight
+
+#@LOSS_REGISTRY.register()
+#class GradientLoss(nn.Module):
+#    def __init__(self, loss_weight=1.0):
+#        super().__init__()
+#        self.loss_weight = loss_weight
+#
+#    def forward(self, pred, target):
+#        pred_dx = pred[:, :, :, :-1] - pred[:, :, :, 1:]
+#        pred_dy = pred[:, :, :-1, :] - pred[:, :, 1:, :]
+#        target_dx = target[:, :, :, :-1] - target[:, :, :, 1:]
+#        target_dy = target[:, :, :-1, :] - target[:, :, 1:, :]
+#        loss = F.l1_loss(pred_dx, target_dx) + F.l1_loss(pred_dy, target_dy)
+#        return loss * self.loss_weight
+
+
+@LOSS_REGISTRY.register()
+class CharbonnierLoss(nn.Module):
+    def __init__(self, eps=1e-3, loss_weight=1.0):  # ✅ 추가
+        super(CharbonnierLoss, self).__init__()
+        self.eps = eps
+        self.loss_weight = loss_weight  # ✅ 저장
+
+    def forward(self, pred, target):
+        loss = torch.mean(torch.sqrt((pred - target) ** 2 + self.eps ** 2))
+        return loss * self.loss_weight  # ✅ 적용

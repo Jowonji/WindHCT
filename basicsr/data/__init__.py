@@ -12,6 +12,7 @@ from basicsr.utils import get_root_logger, scandir
 from basicsr.utils.dist_util import get_dist_info
 from basicsr.utils.registry import DATASET_REGISTRY
 from .numpy_paired_dataset import NumpyPairedDataset
+from .numpy_paired_korea_dataset import NumpyPairedKorea
 
 __all__ = ['build_dataset', 'build_dataloader']
 
@@ -101,7 +102,7 @@ def build_dataloader(dataset, dataset_opt, num_gpu=1, dist=False, sampler=None, 
     else:
         # 잘못된 phase 값 입력 시 예외 처리
         raise ValueError(f"Wrong dataset phase: {phase}. Supported ones are 'train', 'val' and 'test'.")
-    
+
     # 추가 옵션: pin_memory와 persistent_workers 설정
     dataloader_args['pin_memory'] = dataset_opt.get('pin_memory', False) # pin_memory 옵션
     dataloader_args['persistent_workers'] = dataset_opt.get('persistent_workers', False) # persistent_workers 옵션

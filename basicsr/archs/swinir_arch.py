@@ -90,6 +90,49 @@ class Mlp(nn.Module):
         x = self.drop(x) # 다시 드랍아웃 적용
         return x
 
+class ContinuousRelativePositionBias(nn.Module):
+    """
+    연속형 상대 위치 바이어스(CPB).
+    윈도 내 상대좌표(Δx,Δy)를 로그 스케일로 매핑 → 작은 MLP → 헤드별 바이어스.
+    - 파라미터 소량, 창 크기 변화/해상도 외삽에 강함.
+    """
+    def __init__(self, num_heads: int, hidden_dim: int = 128):
+        super().__init__()
+        self.num_heads = num_heads
+        self.mlp = nn.Sequential(
+            nn.Linear(2, hidden_dim, bias=True),
+            nn.ReLU(inplace=True),
+            nn.Linear(hidden_dim, num_heads, bias=True)
+        )
+        # 작은 초기값(과대적합 방지)
+        for m in self.mlp:
+            if isinstance(m, nn.Linear):
+                nn.init.trunc_normal_(m.weight, std=0.02)
+                nn.init.zeros_(m.bias)
+
+        self._cache = {}  # (w, device, dtype) -> [T,T,2] tensor
+
+    @torch.no_grad()
+    def _rel_coords(self, w: int, device, dtype):
+        key = (w, device, dtype)
+        if key in self._cache:
+            return self._cache[key]
+        coords = torch.stack(torch.meshgrid(
+            torch.arange(w, device=device), torch.arange(w, device=device), indexing="ij"
+        ), dim=-1).view(-1, 2)                     # [T,2], T=w*w
+        rel = coords[:, None, :] - coords[None, :, :]  # [T,T,2], Δx,Δy in [-w+1,w-1]
+        # 로그 스케일 정규화(스윈V2 유사): sign * log(1+|Δ|)
+        rel = rel.to(dtype)
+        rel = torch.sign(rel) * torch.log1p(rel.abs())
+        # [-1,1] 근처 분포가 되도록 스케일 정규화
+        rel = rel / math.log(1 + (w - 1))
+        self._cache[key] = rel
+        return rel
+
+    def forward(self, w: int, device, dtype):
+        rel = self._rel_coords(w, device, dtype)       # [T,T,2]
+        bias = self.mlp(rel)                            # [T,T,Hh]
+        return bias.permute(2, 0, 1).contiguous()       # [Hh,T,T]
 
 def window_partition(x, window_size):
     """
@@ -928,11 +971,16 @@ class SwinIR(nn.Module):
                 nn.Conv2d(embed_dim // 4, embed_dim, 3, 1, 1))
 
         # ------------------------- 3, high quality image reconstruction ------------------------- #
-        if self.upsampler == 'pixelshuffle':
-            # for classical SR
-            self.conv_before_upsample = nn.Sequential(
-                nn.Conv2d(embed_dim, num_feat, 3, 1, 1), nn.LeakyReLU(inplace=True))
-            self.upsample = Upsample(upscale, num_feat)
+        if self.upsampler == 'pixelshuffle' and self.upscale == 5:
+            self.conv_before_upsample = nn.Conv2d(embed_dim, num_feat, 3, 1, 1)
+
+            self.upsample = nn.Sequential(
+                nn.Conv2d(num_feat, num_feat * 25, 3, 1, 1),
+                nn.PixelShuffle(5),
+                nn.Conv2d(num_feat, num_feat, 3, 1, 1),
+                nn.ReLU(inplace=True)
+            )
+
             self.conv_last = nn.Conv2d(num_feat, num_out_ch, 3, 1, 1)
         elif self.upsampler == 'pixelshuffledirect':
             # for lightweight SR (to save parameters)
@@ -1010,18 +1058,18 @@ class SwinIR(nn.Module):
             x = self.conv_before_upsample(x)
 
             # 5배 업스케일링을 위한 nearest 보간 후 Conv 적용
-            if self.upscale == 5:
-                x = torch.nn.functional.interpolate(x, scale_factor=5, mode='nearest')  # 🔥 5배 업스케일링
-                x = self.lrelu(self.conv_up1(x))  # Conv 적용
-                x = self.lrelu(self.conv_up2(x))  # Conv 추가 적용
-                x = self.lrelu(self.conv_hr(x))   # Conv 추가 적용
+            if self.upsampler == 'pixelshuffle':
+                x = self.conv_first(x)
+                x = self.conv_after_body(self.forward_features(x)) + x
+                x = self.conv_before_upsample(x)  # Conv2d(embed_dim, num_feat, 3x3)
+                x = self.upsample(x)              # PixelShuffle(5) path
             else:
                 x = torch.nn.functional.interpolate(x, scale_factor=2, mode='nearest')  # 2배 업스케일링
                 x = self.lrelu(self.conv_up1(x))
                 x = torch.nn.functional.interpolate(x, scale_factor=2, mode='nearest')  # 4배 업스케일링
                 x = self.lrelu(self.conv_up2(x))
 
-            x = self.conv_last(self.lrelu(self.conv_hr(x)))
+            x = self.conv_last(self.upsample(x))  # 👈 그대로 작동
 
         return x
 
