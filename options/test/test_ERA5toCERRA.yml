@@ -44,7 +44,7 @@ save_img: true
 
 # path
 path:
-  pretrain_network_g: experiments/pretrained_models/WindHCT_ERA5toCERRA/net_g_46800.pth
+  pretrain_network_g: experiments/pretrained_models/WindHCT_ERA5toCERRA/net_g_nn.pth
   strict_load_g: true
   npy_results: ./results/npy_results
   gt_visualization: ./results/gt_visualization
