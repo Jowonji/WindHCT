@@ -1,1 +1,1 @@
-Place pretrained models in pretrained_models.
+Place pretrained models here.
