@@ -1,0 +1,110 @@
+# general setting
+name: WindHCT_WINDToolkit
+model_type: SRModel
+scale: 5
+num_gpu: 1
+manual_seed: 0
+
+# dataset and data loader settings
+datasets:
+  train:
+    name: WINDToolkit
+    type: NumpyPairedDataset
+    dataroot_gt: datasets/WINDToolkit/train_HR.npy
+    dataroot_lq: datasets/WINDToolkit/train_LR.mpy
+    filename_tmpl: '{}'
+    io_backend:
+      type: numpy
+      
+    gt_size: 255
+    use_hflip: false
+    use_rot: false
+    use_blur: false
+    
+    # data loader
+    num_worker_per_gpu: 8
+    batch_size_per_gpu: 32
+    dataset_enlarge_ratio: 1
+    prefetch_mode: ~
+
+  val:
+    name: WINDToolkit
+    type: NumpyPairedDataset
+    dataroot_gt: datasets/WINDToolkit/val_HR.npy
+    dataroot_lq: datasets/WINDToolkit/val_LR.mpy
+    norm_path: datasets/ERA5toCERRA/train_scalers.npz
+    io_backend:
+      type: numpy
+
+network_g:
+  type: WindHCT
+  num_in_ch: 1
+  num_out_ch: 1
+  num_feat: 64
+  window_size: 5
+  num_group: 6
+  num_block: 6
+  num_heads: 4
+  mlp_ratio: 4.0
+  drop_prob: 0.1
+  img_range: 1.0
+  rgb_mean: [0.0]
+  upscale: 5
+
+  use_edge_mask: true
+  learnable_mask: true
+  share_mask_per_group: true
+
+# path
+path:
+  experiments_root: experiments/pretrained_models
+  pretrain_network_g: ~
+  strict_load_g: false
+  resume_state: ~
+
+# training settings
+train:
+  optim_g:
+    type: Adam
+    lr: !!float 1e-4
+    weight_decay: 0
+    betas: [0.9, 0.99]
+
+  scheduler:
+    type: MultiStepLR
+    milestones: [35000, 43000, 48000]
+    gamma: 0.5
+
+  total_iter: 50000
+  warmup_iter: -1  # no warm up
+
+  # losses
+  pixel_opt:
+    type: L1Loss
+    loss_weight: 1.0
+    reduction: mean
+
+# validation settings
+val:
+  val_freq: !!float 1800
+  save_img: true
+
+  metrics:
+    rmse: # metric name, can be arbitrary
+      type: calculate_rmse
+      crop_border: 0
+      test_y_channel: false
+
+# logging settings
+logger:
+  print_freq: 100
+  save_checkpoint_freq: !!float 1800
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
