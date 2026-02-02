@@ -1,0 +1,62 @@
+name: WindHCT_ERA5toCERRA
+suffix: ~
+model_type: SRModel
+scale: 5
+crop_border: ~
+num_gpu: 1
+manual_seed: 0
+
+datasets:
+  test_1:
+    name: ERA52CERRA
+    type: NumpyPairedDataset
+    dataroot_gt: datasets/ERA5toCERRA/test_HR.npy
+    dataroot_lq: datasets/ERA5toCERRA/test_LR.npy
+    norm_path: datasets/ERA5toCERRA/train_scalers.npz
+    io_backend:
+      type: numpy
+
+# network structures
+network_g:
+  type: WindHCT
+  num_in_ch: 1
+  num_out_ch: 1
+  num_feat: 64
+  window_size: 17
+  num_group: 6
+  num_block: 6
+  num_heads: 4
+  mlp_ratio: 4.0
+  drop_prob: 0.1
+  img_range: 1.0
+  rgb_mean: [0.0]
+  upscale: 5
+
+  use_edge_mask: true
+  learnable_mask: true
+  share_mask_per_group: true
+
+  mask_sanity_mode: "none"
+  mask_sanity_const: 0.0
+  debug: true
+
+save_img: true
+
+# path
+path:
+  pretrain_network_g: experiments/pretrained_models/WindHCT_ERA5toCERRA/net_g_46800.pth
+  strict_load_g: true
+  npy_results: ./results/npy_results
+  gt_visualization: ./results/gt_visualization
+
+# validation settings
+val:
+  save_img: true
+  save_npy: true
+  suffix: ~
+
+  metrics:
+    psnr: {}
+    ssim: {}
+    rmse: {}
+    mae: {}
