@@ -91,7 +91,7 @@ Logs and checkpoints → `experiments/`
 ### Testing
 
 ```bash
-python basicsr/test.py -opt options/test_wind.yml
+python basicsr/test_wind.py -opt options/test_wind.yml
 ```
 
 Results and metrics → `results/`
