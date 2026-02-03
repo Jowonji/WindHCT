@@ -62,28 +62,6 @@ x_norm = (x - x_min) / (x_max - x_min)
 fig
 ```
 
-### Key Components
-
-**Edge-Aware Window Mask (EAWM)**
-- Sobel-initialized depthwise convolution for edge detection
-- Learnable filters adapt to wind field characteristics
-- Generated once per Residual Group, shared across all CLFBs
-
-**Context Branch**
-- Window-based Multi-Head Self-Attention (W-MSA / SW-MSA alternating per CLFB)
-- EAWM-guided query gating for high-frequency region focus
-- Coordinate Attention for directional context encoding
-
-**Local Branch**
-- Sequential 5×5 and 7×7 convolutions with Group Normalization and GELU
-- Captures local turbulence and fine-grained structures
-
-**Adaptive Fusion**
-- Learns position-wise gate G via concatenation + 1×1 conv + sigmoid
-- Output: `F = G ⊙ F_context + (1-G) ⊙ F_local`
-
----
-
 ## Installation
 
 ```bash
