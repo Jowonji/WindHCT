@@ -83,7 +83,11 @@ windtoolkit-prep.ipynb
 ### Training
 
 ```bash
-python basicsr/train.py -opt options/train_wind.yml
+# WIND Toolkit dataset
+python basicsr/train.py -opt options/train/WindHCT_WINDToolkit.yml
+
+# ERA5-CERRA dataset
+python basicsr/train.py -opt options/train/WindHCT_ERA5toCEERRA.yml
 ```
 
 Logs and checkpoints → `experiments/`
@@ -91,7 +95,11 @@ Logs and checkpoints → `experiments/`
 ### Testing
 
 ```bash
-python basicsr/test_wind.py -opt options/test_wind.yml
+# WIND Toolkit dataset
+python basicsr/test.py -opt options/test/test_WINDToolkit.yml
+
+# ERA5-CERRA dataset
+python basicsr/test.py -opt options/test/test_ERA5toCERRA.yml
 ```
 
 Results and metrics → `results/`
@@ -107,7 +115,7 @@ WindHCT/
 ├── experiments/              # Training logs and checkpoints
 ├── options/                  # Configuration files (YAML)
 ├── results/                  # Inference outputs
-├── windtoolkit-prep.ipynb    # Dataset generation notebook
+├── windtoolkit-prep.ipynb    # WINDToolkit Dataset generation notebook
 ├── requirements.txt
 └── README.md
 ```
