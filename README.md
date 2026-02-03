@@ -58,9 +58,8 @@ x_norm = (x - x_min) / (x_max - x_min)
 
 ## Model Architecture
 
-```
-fig
-```
+> 📌 *Architecture diagram will be added soon.*
+
 
 ## Installation
 
