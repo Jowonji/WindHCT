@@ -1,5 +1,5 @@
 """
-WindHCT (single-file implementation)
+WindHCT
 
 Attributions:
 - Coordinate Attention (CoordAtt): Hou et al., CVPR 2021.
