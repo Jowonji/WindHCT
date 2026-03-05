@@ -16,7 +16,7 @@ datasets:
     io_backend:
       type: numpy
       
-    gt_size: 255
+    gt_size: 100
     use_hflip: false
     use_rot: false
     use_blur: false
