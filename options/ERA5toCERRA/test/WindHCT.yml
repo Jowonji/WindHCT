@@ -1,0 +1,54 @@
+name: WindHCT_ERA5toCERRA
+suffix: ~  # add suffix to saved images
+model_type: SRModel
+scale: 5
+crop_border: ~  # crop border when evaluation. If None, crop the scale pixels
+num_gpu: 1  # set num_gpu: 0 for cpu mode
+manual_seed: 0
+
+datasets:
+  test_1:  # the 1st test dataset
+    name: ERA52CERRA_V2
+    type: NumpyPairedDataset
+    dataroot_gt: datasets/ERA5toCERRA/test_hr_norm.npy
+    dataroot_lq: datasets/ERA5toCERRA/test_lr_norm.npy
+    norm_path: datasets/ERA5toCERRA/manifest_train_scalers.npz
+    io_backend:
+      type: numpy
+
+# network structures
+network_g:
+  type: WindHCT
+  num_in_ch: 1
+  num_out_ch: 1
+  num_feat: 64
+  window_size: 17
+  num_group: 6
+  num_block: 6
+  num_heads: 4
+  mlp_ratio: 4.0
+  drop_prob: 0.1
+  img_range: 1.0
+  rgb_mean: [0.0]
+  upscale: 5
+
+save_img: true
+
+# path
+path:
+  pretrain_network_g: experiments/pretrained_models/WindHCT_ERA5toCERRA.pth
+  strict_load_g: true
+  npy_results: ./results/npy_results  # path for saving raw SR output as .npy
+  gt_visualization: ./results/gt_visualization
+
+# validation settings
+val:
+  save_img: true
+  save_npy: true  # set false to skip saving .npy output
+  suffix: ~  # add suffix to saved images, if None, use exp name
+
+  metrics:
+    psnr: {}
+    ssim: {}
+    rmse: {}
+    mae: {}
